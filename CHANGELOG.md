@@ -5,7 +5,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Planned
-- HTTP Range requests / resume downloads
+- Download a whole folder as one zip
+- Session cookies instead of query-string tokens
+- Optional TLS (`--cert`/`--key`)
+
+## [0.2.0] - 2026-10-03
+### Added
+- HTTP Range request support for resumable downloads: `Accept-Ranges: bytes`,
+  single-range and suffix (`bytes=-N`) requests served as `206 Partial Content`
+  with `Content-Range`, `416` + `Content-Range: bytes */size` for unsatisfiable
+  ranges, malformed headers fall back to a full `200` response
 
 ## [0.1.0] - 2026-10-03
 ### Added
