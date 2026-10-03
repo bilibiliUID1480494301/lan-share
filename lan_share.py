@@ -26,7 +26,7 @@ import urllib.parse
 from datetime import datetime
 from pathlib import Path
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 UNSAFE_NAME = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 
@@ -221,17 +221,46 @@ class ShareHandler(http.server.BaseHTTPRequestHandler):
         disposition = "inline" if preview else "attachment"
         filename = urllib.parse.quote(path.name)
         try:
+            size = path.stat().st_size
+        except OSError:
+            self.send_error(404, "Not found")
+            return
+        start, end, status = 0, size - 1, 200
+        range_header = (self.headers.get("Range") or "").strip()
+        match = re.fullmatch(r"bytes=(\d*)-(\d*)", range_header) if range_header else None
+        if match and (match.group(1) or match.group(2)):
+            if match.group(1):
+                start = int(match.group(1))
+                end = int(match.group(2)) if match.group(2) else size - 1
+            else:  # suffix form: last N bytes
+                start = max(0, size - int(match.group(2)))
+            if start >= size or end < start:
+                body = b"requested range not satisfiable\n"
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            end = min(end, size - 1)
+            status = 206
+        try:
             with path.open("rb") as handle:
-                stat = path.stat()
-                self.send_response(200)
+                handle.seek(start)
+                remaining = end - start + 1
+                self.send_response(status)
                 self.send_header("Content-Type", ctype)
-                self.send_header("Content-Length", str(stat.st_size))
+                self.send_header("Content-Length", str(remaining))
+                self.send_header("Accept-Ranges", "bytes")
+                if status == 206:
+                    self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
                 self.send_header(
                     "Content-Disposition", f"{disposition}; filename*=UTF-8''{filename}"
                 )
                 self.end_headers()
-                while True:
-                    chunk = handle.read(64 * 1024)
+                while remaining > 0:
+                    chunk = handle.read(min(remaining, 64 * 1024))
                     if not chunk:
                         break
                     self.wfile.write(chunk)

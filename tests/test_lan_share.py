@@ -194,5 +194,57 @@ class TokenTests(ServerTestCase):
         self.assertEqual(denied[0], 401)
 
 
+class RangeTests(ServerTestCase):
+    def setUp(self):
+        self.start_server()
+        self.payload = bytes(range(256)) * 4  # 1024 bytes
+        (self.root / "blob.bin").write_bytes(self.payload)
+
+    def fetch(self, path, headers=None):
+        req = urllib.request.Request(self.base + path, headers=headers or {})
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                return resp.status, resp.read(), dict(resp.headers)
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.read(), dict(exc.headers)
+
+    def test_full_request_advertises_accept_ranges(self):
+        status, body, headers = self.fetch("/blob.bin")
+        self.assertEqual(status, 200)
+        self.assertEqual(headers.get("Accept-Ranges"), "bytes")
+        self.assertEqual(body, self.payload)
+
+    def test_single_range_returns_slice(self):
+        status, body, headers = self.fetch("/blob.bin", {"Range": "bytes=100-199"})
+        self.assertEqual(status, 206)
+        self.assertEqual(body, self.payload[100:200])
+        self.assertEqual(headers.get("Content-Range"), "bytes 100-199/1024")
+
+    def test_open_end_range_returns_tail(self):
+        status, body, _ = self.fetch("/blob.bin", {"Range": "bytes=1000-"})
+        self.assertEqual(status, 206)
+        self.assertEqual(body, self.payload[1000:])
+
+    def test_suffix_range_returns_tail(self):
+        status, body, _ = self.fetch("/blob.bin", {"Range": "bytes=-100"})
+        self.assertEqual(status, 206)
+        self.assertEqual(body, self.payload[-100:])
+
+    def test_resume_across_two_requests(self):
+        _, first, _ = self.fetch("/blob.bin", {"Range": "bytes=0-499"})
+        _, second, _ = self.fetch("/blob.bin", {"Range": "bytes=500-"})
+        self.assertEqual(first + second, self.payload)
+
+    def test_out_of_range_returns_416(self):
+        status, _, headers = self.fetch("/blob.bin", {"Range": "bytes=2000-3000"})
+        self.assertEqual(status, 416)
+        self.assertEqual(headers.get("Content-Range"), "bytes */1024")
+
+    def test_malformed_range_serves_full_body(self):
+        status, body, _ = self.fetch("/blob.bin", {"Range": "not-a-range"})
+        self.assertEqual(status, 200)
+        self.assertEqual(body, self.payload)
+
+
 if __name__ == "__main__":
     unittest.main()

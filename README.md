@@ -18,7 +18,7 @@ python lan_share.py --dir ./photos --port 8000
 ```
 
 ```
-  lan-share v0.1.0 -- sharing E:\dev\photos
+  lan-share v0.2.0 -- sharing E:\dev\photos
   local   http://127.0.0.1:8000/
   network http://192.168.1.23:8000/
   Ctrl+C to stop
@@ -40,6 +40,8 @@ Open the *network* URL on any device in the same LAN. That's it.
 ## Features
 
 - **Browse & download** — clean, mobile-friendly listing with sizes and mtimes.
+- **Resumable downloads** — `Accept-Ranges` + single-range `206 Partial Content`,
+  so download managers and `curl -C -` can resume interrupted transfers.
 - **Upload** — drag files into the page; duplicate names get an auto ` (1)` suffix.
 - **Read-only mode** — `--read-only` turns uploads off entirely.
 - **Token gate** — `--token mysecret` requires `?token=mysecret` on every URL.
